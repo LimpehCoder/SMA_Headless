@@ -2,6 +2,7 @@ import warnings
 from enum import Enum
 from pygame.math import Vector2
 from queue import Queue, Empty, Full
+import Timer
 
 
 class Directions(Enum):
