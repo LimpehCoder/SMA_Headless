@@ -32,11 +32,13 @@ NO_STAFF = 50
 NO_SUBCON = 40
 NO_NPI = 40
 
+phase_initialised = None  # Can be "MORNING", "AFTERNOON", or "OVERTIME"
 dt: float = 0
 day: int = 1
 shift: int = 1
 clock: int = 25200  
 is_peak: bool = False  # True if peak season, False if non-peak
+is_NPI: bool = False  # True if NPI couriers are present, False otherwise
 recall_triggered: bool = False  # True if recalls have been triggered, False otherwise
 
 def format_clock() -> str:

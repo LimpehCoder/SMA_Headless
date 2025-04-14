@@ -5,7 +5,7 @@ import globals
 
 class BoxPile:
   min_loaded_count = 0
-  def __init__(self, index: int, min_cooldown: float, max_cooldown: float, initial_pile: int, max_length=69):
+  def __init__(self, index: int, min_cooldown: float, max_cooldown: float, initial_pile: int, max_length=100):
     self.index = index
     self.box_count = initial_pile
     self.min_cooldown = min_cooldown
@@ -33,7 +33,7 @@ class BoxPile:
         print("no boxes bro")
         return False
       self.queue.put_nowait(courier)
-      print(f"[{globals.dt}] courier with id {courier.id} entered queue")
+      print(f"Courier with id {courier.id} entered queue at time {globals.format_clock()}")
       return True
     except queue.Full:
       print("queue full bro")

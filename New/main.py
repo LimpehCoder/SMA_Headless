@@ -1,9 +1,9 @@
 from queue import Queue  # Import Queue for managing courier queuing at box piles
-from Courier import Courier  # Import the Courier class
+from Courier import Courier, Statuses  # Import the Courier class
 import globals  # Import shared global variables and constants
 import time  # For managing simulation timing
 import box_pile  # Import the BoxPile class/module
-from random import Random  # Random number generation (used for shipment sizes)
+import random  # Random number generation (used for shipment sizes)
 
 isRunning = True  # Flag to keep the simulation running
 currTime = time.time()  # Capture the current wall-clock time for simulation timing
@@ -11,13 +11,17 @@ currTime = time.time()  # Capture the current wall-clock time for simulation tim
 # Function to calculate cost (currently unused due to early return)
 def calculateCost():
     return  # This immediately ends the function — the logic below is not run
-    globals.NO_STAFF * globals.STAFF_MONTHLY_PAY//20 * 20 + \  # Intended cost calc (commented out)
+    globals.NO_STAFF * globals.STAFF_MONTHLY_PAY//20 * 20 + \
     (globals.NO_FAILED_DELIVERY_SUBCON + globals.NO_SUCCESSFUL_DELIVERY_SUBCON) * globals.SUBCON_PER_STOP_PAY
 
 # Function to create three phase setups (morning, afternoon, reset), based on whether it's peak or non-peak
 def setPhase(peak):
-    if len(globals.boxPiles)<2:  # Sanity check to ensure boxPiles are initialized
-        raise Exception("global.boxPiles Not Initialised")  # Error if not
+    if globals.is_NPI:
+        if len(globals.boxPiles)<2:  # Sanity check to ensure boxPiles are initialized
+            raise Exception("global.boxPiles Not Initialised")  # Error if not
+    else:
+        if len(globals.boxPiles)<1:
+            raise Exception("global.boxPiles Not Initialised")
 
     # Assign shipment max/min based on PEAK as default
     amshipmentmax = globals.PEAK_SHIPMENT_MAX_AM
@@ -34,7 +38,7 @@ def setPhase(peak):
 
     # Generate randomized morning shipment volumes per pile
     AM = [
-        Random.randint(
+        random.randint(
             amshipmentmin[i],
             amshipmentmax[i]) 
         for i in range(len(globals.boxPiles))
@@ -42,31 +46,37 @@ def setPhase(peak):
 
     # Generate randomized afternoon shipment volumes per pile
     PM = [
-        Random.randint(
+        random.randint(
             pmshipmentmin[i],
             pmshipmentmax[i]) 
         for i in range(len(globals.boxPiles))
     ]
 
     # Find max and min shipment volume across all peak and non-peak sets
+    # Flatten and get the max and min from all four lists
     maxship = max(
-        globals.PEAK_SHIPMENT_MAX_AM + globals.PEAK_SHIPMENT_MAX_PM,
-        globals.NONPEAK_SHIPMENT_MAX_AM + globals.NONPEAK_SHIPMENT_MAX_PM
-    )
+        max(globals.PEAK_SHIPMENT_MAX_AM),
+        max(globals.PEAK_SHIPMENT_MAX_PM),
+        max(globals.NONPEAK_SHIPMENT_MAX_AM),
+        max(globals.NONPEAK_SHIPMENT_MAX_PM)
+        )
 
     minship = min(
-        globals.NONPEAK_SHIPMENT_MIN_AM + globals.NONPEAK_SHIPMENT_MAX_PM,
-        globals.PEAK_SHIPMENT_MIN_PM + globals.PEAK_SHIPMENT_MIN_AM
-    )
+        min(globals.PEAK_SHIPMENT_MIN_AM),
+        min(globals.PEAK_SHIPMENT_MIN_PM),
+        min(globals.NONPEAK_SHIPMENT_MIN_AM),
+        min(globals.NONPEAK_SHIPMENT_MIN_PM)
+        )
 
     # Scale number of NPI and SUBCON couriers based on demand from AM shipments
-    globals.NO_NPI = (globals.SUBCON_MAX - globals.SUBCON_MIN) * (AM[0] - minship)/(maxship - minship)
-    globals.NO_SUBCON = (globals.SUBCON_MAX - globals.SUBCON_MIN) * (AM[1] - minship)/(maxship - minship)
+    globals.NO_SUBCON = (globals.SUBCON_MAX - globals.SUBCON_MIN) * (AM[0] - minship)/(maxship - minship)
+    if globals.is_NPI:
+        globals.NO_NPI = (globals.SUBCON_MAX - globals.SUBCON_MIN) * (AM[0] - minship)/(maxship - minship)
 
     # Define a nested function factory that returns an initializer function
     def thing(load):
         # Function to initialize couriers and apply shipment load to piles
-        def initialise(load):
+        def initialise():
             globals.couriers = []  # Reset all couriers
 
             # Spawn STAFF couriers
@@ -74,21 +84,37 @@ def setPhase(peak):
                 globals.couriers.append(Courier(i, globals.Jobs.STAFF))
 
             # Spawn SUB_CON couriers
-            for i in range(globals.NO_SUBCON):
+            for i in range(int(globals.NO_SUBCON)):
                 globals.couriers.append(Courier(i, globals.Jobs.SUB_CON))
-
+            if globals.is_NPI:
             # Spawn NPI couriers
-            for i in range(globals.NO_NPI):
-                globals.couriers.append(Courier(i, globals.Jobs.NPI))
+                for i in range(int(globals.NO_NPI)):
+                    globals.couriers.append(Courier(i, globals.Jobs.NPI))
 
             # Distribute shipment load across boxPiles
             for i in range(len(load)):
-                globals.boxPiles[i].box_count += load[i]
+                pile_index = i if len(globals.boxPiles) > 1 else 0  # Always redirect to pile 0 if only one exists
+                globals.boxPiles[pile_index].box_count += load[i]
 
         return initialise  # Return the nested initializer function
 
     # Return three initializer functions: morning, afternoon, reset
     return thing(AM), thing(PM), thing([0,0])
+
+def endofDay():
+    if globals.format_clock() == "22:00:00":
+        for courier in globals.couriers:
+            total_boxes=courier.carryingBoxes + courier.loadedBoxes
+            if total_boxes > 0:
+                # If the courier has boxes, they will be returned to the box pile
+                globals.boxPiles[0].box_count += total_boxes
+                courier.loadedBoxes = 0
+                courier.carryingBoxes = 0
+                print(f"Courier {courier.id} returned {total_boxes} boxes to box pile {courier.job.value}.")
+                courier._setState(Statuses.DESPAWNING)
+        globals.couriers.clear()
+        globals.recall_triggered = True
+        print("End of day reached. Triggering recalls.")
 
 # --- Initialization Section ---
 
@@ -96,21 +122,60 @@ def setPhase(peak):
 for i in range(5):
     globals.couriers.append(Courier(i, globals.Jobs.STAFF))
 
+if globals.is_NPI:
+    for i in range(2):
+        globals.boxPiles.append(box_pile.BoxPile(i, 6, 9, 40))
 # Create 2 BoxPiles (index 0 and 1) with cooldowns 6–9s and initial stock of 40
-for i in range(2):
-    globals.boxPiles.append(box_pile.BoxPile(i, 6, 9, 40))
+else:
+    for i in range(1):
+        globals.boxPiles.append(box_pile.BoxPile(i, 6, 9, 40))
+
+# Set whether current day is peak or non-peak
+if globals.is_peak:
+    set_morning, set_afternoon, set_reset = setPhase(peak=True)
+else:
+    set_morning, set_afternoon, set_reset = setPhase(peak=False)
 
 # --- Main Simulation Loop ---
 while (isRunning):  # Run loop while simulation is active
     currTime = time.time()  # Get current frame time (for frame pacing)
+    globals.clock = (globals.clock + 1) % 86400  # 86400 seconds in a day
+    if globals.clock == 0:
+        globals.day += 1
+    # Setup once at the beginning of each shift
+    if globals.format_clock() == "08:00:00" and globals.phase_initialised != "MORNING":
+        set_morning()
+        globals.phase_initialised = "MORNING"
+        globals.shift = globals.Shifts.MORNING
+        print("Morning phase initialized.")
 
-    # --- Update Phase: Courier Logic ---
-    for courier in globals.couriers:
-        courier.update()  # Let each courier update its state
+    elif globals.format_clock() == "13:00:00" and globals.phase_initialised != "AFTERNOON":
+        set_afternoon()
+        globals.phase_initialised = "AFTERNOON"
+        globals.shift = globals.Shifts.AFTERNOON
+        print("Afternoon phase initialized.")
 
-    # --- Update Phase: BoxPile Logic ---
-    for boxPile in globals.boxPiles:
-        boxPile.update()  # Let each pile update (pickup, restock, etc.)
+    elif globals.format_clock() == "18:00:00" and globals.phase_initialised != "OVERTIME":
+        set_reset()
+        globals.phase_initialised = "OVERTIME"
+        globals.shift = globals.Shifts.OVERTIME
+        print("Reset phase initialized.")
+
+    elif globals.format_clock() == "22:00:00":
+        endofDay()
+    
+    elif globals.format_clock() == "07:00:00":
+        globals.recall_triggered = False
+        # Reset couriers at the start of the day
+
+    if globals.format_clock() < "22:00:00" and globals.format_clock() > "07:00:00":
+        # --- Update Phase: Courier Logic ---
+        for courier in globals.couriers:
+            courier.update()  # Let each courier update its state
+
+        # --- Update Phase: BoxPile Logic ---
+        for boxPile in globals.boxPiles:
+            boxPile.update()  # Let each pile update (pickup, restock, etc.)
 
     # --- Frame Pacing ---
     # globals.dt = time.time() - currTime  # Uncomment to enable real-time pacing
