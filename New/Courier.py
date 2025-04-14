@@ -38,7 +38,7 @@ class Courier:
     isAlive: bool
     job: globals.Jobs
     stopCount: int # number of times a stop is made
-    maxAttempts: int
+    maxAttempts: int = 50
     attempts: int
     
     CARRYING_CAPACITY: int = 5
@@ -152,19 +152,24 @@ class Courier:
 
             # Determine if the courier should drive or go back to pick up more
             if self.loadedBoxes >= globals.VAN_CAP_MAX or areAllBoxCountsZero:
+                print(f"[LOADING] {self.job} courier {self.id} is proceeding to DRIVING because loadedBoxes = {self.loadedBoxes} (>= VAN_CAP_MAX) or all queues empty.")
                 self._setState(Statuses.DRIVING)
                 self.maxAttempts = self.loadedBoxes
                 self.attempts = 0
             elif self.loadedBoxes < globals.VAN_CAP_MIN:
+                print(f"[LOADING] {self.job} courier {self.id} is going back to WALKING because loadedBoxes = {self.loadedBoxes} (< VAN_CAP_MIN).")
                 self._setState(Statuses.WALKING)
             elif self.loadedBoxes == globals.VAN_CAP_MIN and box_pile.BoxPile.min_loaded_count == globals.VAN_CAP_MIN:
+                print(f"[LOADING] {self.job} courier {self.id} is going back to WALKING because loadedBoxes == VAN_CAP_MIN and min_loaded_count == VAN_CAP_MIN.")
                 self._setState(Statuses.WALKING)
             elif self.loadedBoxes >= globals.VAN_CAP_MIN and box_pile.BoxPile.min_loaded_count >= globals.VAN_CAP_MIN:
+                print(f"[LOADING] {self.job} courier {self.id} is proceeding to DRIVING because both loadedBoxes ({self.loadedBoxes}) and min_loaded_count are >= VAN_CAP_MIN.")
                 self._setState(Statuses.DRIVING)
                 self.maxAttempts = self.loadedBoxes
                 self.attempts = 0
             elif self.loadedBoxes >= globals.VAN_CAP_MIN and self.loadedBoxes <= globals.VAN_CAP_MAX and box_pile.BoxPile.min_loaded_count <= globals.VAN_CAP_MIN:
-                self._setState(Statuses.WALKING)
+                print(f"[LOADING] {self.job} courier {self.id} is proceeding to DRIVING because loadedBoxes = {self.loadedBoxes} is within range and min_loaded_count <= VAN_CAP_MIN.")
+                self._setState(Statuses.DRIVING)
             else:
                 raise "you messed up"
 
@@ -176,17 +181,34 @@ class Courier:
         elif self.state == Statuses.DELIVERING:
             # Try to deliver boxes one-by-one
             if self.loadedBoxes > 0 and self.attempts < self.maxAttempts:
+                # Attempt delivery: may or may not succeed depending on courier type
                 if self.rng.uniform(0, 1) > globals.AT_HOME_CHANCE:
                     if self.job == globals.Jobs.STAFF:
                         self.loadedBoxes -= 1
-                    elif self.rng.uniform(0, 1) > globals.IS_BLIND_CHANCE:
-                        self.loadedBoxes -= 1
+                    elif self.job == globals.Jobs.SUB_CON:
+                        if self.rng.uniform(0, 1) > globals.IS_BLIND_CHANCE:
+                            self.loadedBoxes -= 1
                 self.attempts += 1
-                self._setState(Statuses.DRIVING)  # Return to driving for next delivery
+                self._setState(Statuses.DRIVING)  # Go back for the next stop
+
             else:
-                self._setState(Statuses.RETURNING)  # Finished deliveries
+                # All delivery attempts completed — calculate and record success/failure
+                if self.job == globals.Jobs.STAFF:
+                    success = round(self.maxAttempts * globals.AT_HOME_CHANCE)
+                    fail = self.maxAttempts - success
+                    globals.NO_SUCCESSFUL_DELIVERY_STAFF += success
+                    globals.NO_FAILED_DELIVERY_STAFF += fail
+
+                elif self.job == globals.Jobs.SUB_CON:
+                    success = round(self.maxAttempts * globals.AT_HOME_CHANCE * (1 - globals.IS_BLIND_CHANCE))
+                    fail = self.maxAttempts - success
+                    globals.NO_SUCCESSFUL_DELIVERY_SUBCON += success
+                    globals.NO_FAILED_DELIVERY_SUBCON += fail
+
+                self._setState(Statuses.RETURNING)  # Move on to return phase
 
             print(f"{self.job} courier {self.id} has exited delivering at {globals.format_day()} {globals.format_clock()}")
+
 
         elif self.state == Statuses.RETURNING:
             # Return any leftover boxes to a random box pile and restart

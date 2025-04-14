@@ -163,6 +163,8 @@ while (isRunning):  # Run loop while simulation is active
 
     elif globals.format_clock() == "22:00:00":
         endofDay()
+        print(f"Staff had {globals.NO_SUCCESSFUL_DELIVERY_STAFF} successful deliveries and {globals.NO_FAILED_DELIVERY_STAFF} failed deliveries.")
+        print(f"Subcon had {globals.NO_SUCCESSFUL_DELIVERY_SUBCON} successful deliveries and {globals.NO_FAILED_DELIVERY_SUBCON} failed deliveries.")
     
     elif globals.format_clock() == "07:00:00":
         globals.recall_triggered = False
