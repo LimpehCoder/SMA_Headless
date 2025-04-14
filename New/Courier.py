@@ -1,30 +1,31 @@
-from enum import Enum
-import random
-import globals
-import box_pile
+from enum import Enum  # For defining courier states
+import random  # For randomized delays and outcomes
+import globals  # Import global variables like clock, shift, box piles, etc.
+import box_pile  # To reference the BoxPile class
 
 class Statuses(Enum):
-    IDLING = 0
-    WALKING = 1 # walking to queue
-    SORTING = 2 # queuing
-    MOVING = 3 # moving to van
-    LOADING = 4 # loading van
-    DRIVING = 5
-    DELIVERING = 6
-    RETURNING = 7
-    DESPAWNING = 8
+    IDLING = 0         # Not doing anything
+    WALKING = 1        # Walking to a box pile queue
+    SORTING = 2        # Waiting in the queue to pick up boxes
+    MOVING = 3         # Moving to van after picking up boxes
+    LOADING = 4        # Loading boxes into the van
+    DRIVING = 5        # Driving to delivery locations
+    DELIVERING = 6     # Attempting deliveries
+    RETURNING = 7      # Returning after delivery
+    DESPAWNING = 8     # End-of-day shutdown
 
 delays = [
-    [0, 1], # idling
-    [4, 8], # walking
-    [0, 0], # queuing
-    [6, 9], # moving
-    [3, 5], # loading
-    [1, 1], # driving
-    [5, 5], # delivering
-    [globals.RETURN_MIN_TIMING, globals.RETURN_MAX_TIMING], # returning
-    [0, 0], # despawning
+    [0, 0],                             # IDLING — no delay
+    [4, 8],                             # WALKING — 4 to 8 seconds
+    [0, 0],                             # SORTING — handled by pile, no internal delay
+    [6, 9],                             # MOVING — to the van
+    [3, 5],                             # LOADING — load into vehicle
+    [1, 1],                             # DRIVING — fixed travel time
+    [5, 5],                             # DELIVERING — attempt takes time
+    [globals.RETURN_MIN_TIMING, globals.RETURN_MAX_TIMING],  # RETURNING — variable travel back time
+    [0, 0],                             # DESPAWNING — instant
 ]
+
 
 class Courier:
     id: int
@@ -45,149 +46,163 @@ class Courier:
     rng = random.Random()
 
     def reset(self):
-        self._setState(Statuses.WALKING)
-        self.carryingBoxes = 0
-        self.loadedBoxes = 0
-        self.shldCountdown = True
-        self.timer = 0
-        self.isAlive = True
+        self._setState(Statuses.WALKING)  # Start in WALKING state
+        self.carryingBoxes = 0  # Empty hands
+        self.loadedBoxes = 0  # Empty van
+        self.shldCountdown = True  # Enable countdown
+        self.timer = 0  # Reset timer
+        self.isAlive = True  # Set alive status
 
     def __init__(self, id: int, job: globals.Jobs):
-        self.id = id
-        self.job = job
-        self.reset()
-    
+        self.id = id  # Assign ID
+        self.job = job  # Assign job type
+        self.reset()  # Initialize values
+
     def _setState(self, state: Statuses):
-        self.state = state
+        self.state = state  # Assign state
         print(f"courier {self.id} is entering {state.name} at date-time: {globals.format_day()} {globals.format_clock()} on day {globals.day} at {globals.shift} shift")
         if delays[self.state.value][0] == 0 and delays[self.state.value][1] == 0:
-            self.shldCountdown = False
+            self.shldCountdown = False  # No timer needed
         else:
-            self.timer = self.rng.uniform(delays[self.state.value][0], delays[self.state.value][1])
-            self.shldCountdown = True
+            self.timer = self.rng.uniform(delays[self.state.value][0], delays[self.state.value][1])  # Set countdown
+            self.shldCountdown = True  # Enable countdown
+
     
     def _hasAllReachedCap():
         for courier in globals.couriers:
             if courier.loadedBoxes < globals.VAN_CAP_MIN:
-                return False
-        return True
+                return False  # Someone is under capacity
+        return True  # All ready
         
-    def update(self):
-        if not self.shldCountdown:
-            return
+def update(self):
+    # If there's no countdown to run (state with no delay), do nothing
+    if not self.shldCountdown:
+        return
 
-        self.timer -= globals.dt
-        if(self.timer==globals.DAY_LENGTH):
-            self.isAlive = False
-        if (self.timer > 0):
-            return
-        
-        if (self.state == Statuses.IDLING):
-            print(f"courier {self.id} has exited idling at date-time: {globals.format_day()} {globals.format_clock()}")
-            self._setState(Statuses.WALKING)
+    # Decrease timer based on elapsed simulation time
+    self.timer -= globals.dt
 
-        elif (self.state == Statuses.WALKING):
-            result = False
-            if self.job == globals.Jobs.STAFF:
-                if globals.shift == globals.Shifts.OVERTIME:
-                    result = globals.boxPiles[self.rng.randint(0, 1)].try_enter_queue(self)
-                else:
-                    result = globals.boxPiles[0].try_enter_queue(self)
+    # Unused? If the timer hits a full day length, kill the courier
+    if self.timer == globals.DAY_LENGTH:
+        self.isAlive = False
+
+    # If timer isn't finished, wait
+    if self.timer > 0:
+        return
+
+    # === State Machine ===
+    # Each block below represents a courier state and what happens when the timer expires
+
+    if self.state == Statuses.IDLING:
+        # Immediately transition back to walking and try to queue again
+        print(f"courier {self.id} has exited idling at {globals.format_day()} {globals.format_clock()}")
+        self._setState(Statuses.WALKING)
+
+    elif self.state == Statuses.WALKING:
+        # Attempt to enter the queue based on courier type and shift
+        result = False
+        if self.job == globals.Jobs.STAFF:
+            if globals.shift == globals.Shifts.OVERTIME:
+                result = globals.boxPiles[self.rng.randint(0, 1)].try_enter_queue(self)
             else:
-                result = globals.boxPiles[self.job.value].try_enter_queue(self)
-
-            if result:
-                self._setState(Statuses.SORTING)
-            elif self.loadedBoxes > 0:
-                self._setState(Statuses.MOVING)
-            else:
-                self._setState(Statuses.IDLING)
-            
-            print(f"result: {result}")
-            print(f"courier {self.id} has exited walking at date-time: {globals.format_day()} {globals.format_clock()}")
-
-        elif (self.state == Statuses.SORTING):
-            print(f"courier {self.id } has exited sorting at date-time: {globals.format_day()} {globals.format_clock()}")
-
-        elif (self.state == Statuses.MOVING):
-            self._setState(Statuses.LOADING)
-            print(f"courier {self.id} has exited moving at date-time: {globals.format_day()} {globals.format_clock()}")
-
-        elif (self.state == Statuses.LOADING):
-            print(f"courier {self.id} has exited loading at date-time: {globals.format_day()} {globals.format_clock()}")
-            self.loadedBoxes += self.carryingBoxes
-            self.carryingBoxes = 0
-
-            targetQueues = []
-
-            if self.job == globals.Jobs.STAFF:
-                if globals.shift == globals.Shifts.OVERTIME:
-                    targetQueues.append(0)
-                    targetQueues.append(1)
-                else:
-                    targetQueues.append(0)
-            else:
-                targetQueues.append(self.job.value)
-
-            areAllBoxCountsZero = True
-            print(f"size: {len(globals.boxPiles)}")
-            for queue in targetQueues:
-                print(f"queue : {queue}")
-                if globals.boxPiles[queue].box_count != 0:
-                    areAllBoxCountsZero = False
-                    break;
-
-            print(f"courier {self.id} has {self.loadedBoxes} boxes at date-time: {globals.format_day()} {globals.format_clock()}")
-
-            if self.loadedBoxes >= globals.VAN_CAP_MAX or areAllBoxCountsZero:
-                self._setState(Statuses.DRIVING)
-                self.maxAttempts = self.loadedBoxes
-                self.attempts = 0
-            elif self.loadedBoxes < globals.VAN_CAP_MIN:
-                self._setState(Statuses.WALKING)
-            elif self.loadedBoxes == globals.VAN_CAP_MIN and box_pile.BoxPile.min_loaded_count == globals.VAN_CAP_MIN:
-                self._setState(Statuses.WALKING)
-            elif self.loadedBoxes >=globals.VAN_CAP_MIN and box_pile.BoxPile.min_loaded_count >= globals.VAN_CAP_MIN:
-                self._setState(Statuses.DRIVING)
-                self.maxAttempts = self.loadedBoxes
-                self.attempts = 0
-            elif self.loadedBoxes >= globals.VAN_CAP_MIN and self.loadedBoxes <= globals.VAN_CAP_MAX and box_pile.BoxPile.min_loaded_count <= globals.VAN_CAP_MIN:
-                self._setState(Statuses.WALKING)
-            else:
-               raise "you messed up"
-
-        elif (self.state == Statuses.DRIVING):
-            self._setState(Statuses.DELIVERING)
-            print(f"courier {self.id} has exited driving at date-time: {globals.format_day()} {globals.format_clock()}")
-
-        elif (self.state == Statuses.DELIVERING):
-            if self.loadedBoxes > 0 and self.attempts < self.maxAttempts:
-                if self.rng.uniform(0, 1) > globals.AT_HOME_CHANCE:
-                    if self.job == globals.Jobs.STAFF:
-                        self.loadedBoxes -= 1
-                    elif self.rng.uniform(0, 1) > globals.IS_BLIND_CHANCE:
-                        self.loadedBoxes -= 1
-
-                self.attempts += 1
-                self._setState(Statuses.DRIVING)
-            else:
-                self._setState(Statuses.RETURNING)
-            print(f"courier {self.id} has exited delivering at date-time: {globals.format_day()} {globals.format_clock()}")
-
-        elif (self.state == Statuses.RETURNING):
-            self._setState(Statuses.IDLING)
-            globals.boxPiles[self.rng.randint(0, 1)].box_count += self.loadedBoxes
-            self._setState(Statuses.WALKING)
-            print(f"courier {self.id} has exited returning at date-time: {globals.format_day()} {globals.format_clock()}")
-            print(f"courier {self.id} has {self.loadedBoxes} boxes left at date-time: {globals.format_day()} {globals.format_clock()}")
-
-        elif (self.state == Statuses.DESPAWNING):
-            pass
-
+                result = globals.boxPiles[0].try_enter_queue(self)
         else:
-            print("Unknown status")
+            result = globals.boxPiles[self.job.value].try_enter_queue(self)
+
+        # Transition based on queue success and loaded status
+        if result:
+            self._setState(Statuses.SORTING)
+        elif self.loadedBoxes > 0:
+            self._setState(Statuses.MOVING)
+        else:
+            self._setState(Statuses.IDLING)
+
+        print(f"result: {result}")
+        print(f"courier {self.id} has exited walking at {globals.format_day()} {globals.format_clock()}")
+
+    elif self.state == Statuses.SORTING:
+        # Sorting is handled by the box pile — no internal logic on exit
+        print(f"courier {self.id} has exited sorting at {globals.format_day()} {globals.format_clock()}")
+
+    elif self.state == Statuses.MOVING:
+        # Proceed to load boxes into van
+        self._setState(Statuses.LOADING)
+        print(f"courier {self.id} has exited moving at {globals.format_day()} {globals.format_clock()}")
+
+    elif self.state == Statuses.LOADING:
+        # Transfer carried boxes into van
+        print(f"courier {self.id} has exited loading at {globals.format_day()} {globals.format_clock()}")
+        self.loadedBoxes += self.carryingBoxes
+        self.carryingBoxes = 0
+
+        # Determine which box queues to check based on job and shift
+        targetQueues = []
+        if self.job == globals.Jobs.STAFF:
+            if globals.shift == globals.Shifts.OVERTIME:
+                targetQueues.extend([0, 1])
+            else:
+                targetQueues.append(0)
+        else:
+            targetQueues.append(self.job.value)
+
+        # Check if all target piles are empty
+        areAllBoxCountsZero = all(globals.boxPiles[q].box_count == 0 for q in targetQueues)
+
+        print(f"courier {self.id} has {self.loadedBoxes} boxes at {globals.format_day()} {globals.format_clock()}")
+
+        # Determine if the courier should drive or go back to pick up more
+        if self.loadedBoxes >= globals.VAN_CAP_MAX or areAllBoxCountsZero:
+            self._setState(Statuses.DRIVING)
+            self.maxAttempts = self.loadedBoxes
+            self.attempts = 0
+        elif self.loadedBoxes < globals.VAN_CAP_MIN:
+            self._setState(Statuses.WALKING)
+        elif self.loadedBoxes == globals.VAN_CAP_MIN and box_pile.BoxPile.min_loaded_count == globals.VAN_CAP_MIN:
+            self._setState(Statuses.WALKING)
+        elif self.loadedBoxes >= globals.VAN_CAP_MIN and box_pile.BoxPile.min_loaded_count >= globals.VAN_CAP_MIN:
+            self._setState(Statuses.DRIVING)
+            self.maxAttempts = self.loadedBoxes
+            self.attempts = 0
+        elif self.loadedBoxes >= globals.VAN_CAP_MIN and self.loadedBoxes <= globals.VAN_CAP_MAX and box_pile.BoxPile.min_loaded_count <= globals.VAN_CAP_MIN:
+            self._setState(Statuses.WALKING)
+        else:
+            raise "you messed up"
+
+    elif self.state == Statuses.DRIVING:
+        # Arrived at destination, begin delivery attempt
+        self._setState(Statuses.DELIVERING)
+        print(f"courier {self.id} has exited driving at {globals.format_day()} {globals.format_clock()}")
+
+    elif self.state == Statuses.DELIVERING:
+        # Try to deliver boxes one-by-one
+        if self.loadedBoxes > 0 and self.attempts < self.maxAttempts:
+            if self.rng.uniform(0, 1) > globals.AT_HOME_CHANCE:
+                if self.job == globals.Jobs.STAFF:
+                    self.loadedBoxes -= 1
+                elif self.rng.uniform(0, 1) > globals.IS_BLIND_CHANCE:
+                    self.loadedBoxes -= 1
+            self.attempts += 1
+            self._setState(Statuses.DRIVING)  # Return to driving for next delivery
+        else:
+            self._setState(Statuses.RETURNING)  # Finished deliveries
+
+        print(f"courier {self.id} has exited delivering at {globals.format_day()} {globals.format_clock()}")
+
+    elif self.state == Statuses.RETURNING:
+        # Return any leftover boxes to a random box pile and restart
+        self._setState(Statuses.IDLING)
+        globals.boxPiles[self.rng.randint(0, 1)].box_count += self.loadedBoxes
+        self._setState(Statuses.WALKING)
+
+        print(f"courier {self.id} has exited returning at {globals.format_day()} {globals.format_clock()}")
+        print(f"courier {self.id} has {self.loadedBoxes} boxes left at {globals.format_day()} {globals.format_clock()}")
+
+    elif self.state == Statuses.DESPAWNING:
+        # No updates for despawned couriers
+        pass
+    else:
+        print("Unknown status")  # Fallback for unexpected state
 
     def leaveQueue(self):
-        self._setState(Statuses.MOVING)
-        return self.loadedBoxes
-        
+        self._setState(Statuses.MOVING)  # Transition to MOVING
+        return self.loadedBoxes  # Report how many are loaded
