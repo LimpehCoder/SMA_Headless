@@ -15,7 +15,7 @@ class Statuses(Enum):
     DESPAWNING = 8
 
 delays = [
-    [0, 0], # idling
+    [0, 1], # idling
     [4, 8], # walking
     [0, 0], # queuing
     [6, 9], # moving
@@ -59,7 +59,7 @@ class Courier:
     
     def _setState(self, state: Statuses):
         self.state = state
-        print(f"entering {state.name}")
+        print(f"courier {self.id} is entering {state.name} at date-time: {globals.format_day()} {globals.format_clock()} on day {globals.day} at {globals.shift} shift")
         if delays[self.state.value][0] == 0 and delays[self.state.value][1] == 0:
             self.shldCountdown = False
         else:
@@ -83,7 +83,7 @@ class Courier:
             return
         
         if (self.state == Statuses.IDLING):
-            print("exited idling")
+            print(f"courier {self.id} has exited idling at date-time: {globals.format_day()} {globals.format_clock()}")
             self._setState(Statuses.WALKING)
 
         elif (self.state == Statuses.WALKING):
@@ -104,18 +104,17 @@ class Courier:
                 self._setState(Statuses.IDLING)
             
             print(f"result: {result}")
-            print("exited walking")
+            print(f"courier {self.id} has exited walking at date-time: {globals.format_day()} {globals.format_clock()}")
 
         elif (self.state == Statuses.SORTING):
-            print("exited sorting")
+            print(f"courier {self.id } has exited sorting at date-time: {globals.format_day()} {globals.format_clock()}")
 
         elif (self.state == Statuses.MOVING):
             self._setState(Statuses.LOADING)
-            print("exited moving")
+            print(f"courier {self.id} has exited moving at date-time: {globals.format_day()} {globals.format_clock()}")
 
         elif (self.state == Statuses.LOADING):
-            print("exited loading")
-
+            print(f"courier {self.id} has exited loading at date-time: {globals.format_day()} {globals.format_clock()}")
             self.loadedBoxes += self.carryingBoxes
             self.carryingBoxes = 0
 
@@ -138,9 +137,9 @@ class Courier:
                     areAllBoxCountsZero = False
                     break;
 
-            print(f"courier {self.id} has {self.loadedBoxes} boxes")
+            print(f"courier {self.id} has {self.loadedBoxes} boxes at date-time: {globals.format_day()} {globals.format_clock()}")
 
-            if self.loadedBoxes == globals.VAN_CAP_MAX or areAllBoxCountsZero:
+            if self.loadedBoxes >= globals.VAN_CAP_MAX or areAllBoxCountsZero:
                 self._setState(Statuses.DRIVING)
                 self.maxAttempts = self.loadedBoxes
                 self.attempts = 0
@@ -152,12 +151,14 @@ class Courier:
                 self._setState(Statuses.DRIVING)
                 self.maxAttempts = self.loadedBoxes
                 self.attempts = 0
+            elif self.loadedBoxes >= globals.VAN_CAP_MIN and self.loadedBoxes <= globals.VAN_CAP_MAX and box_pile.BoxPile.min_loaded_count <= globals.VAN_CAP_MIN:
+                self._setState(Statuses.WALKING)
             else:
                raise "you messed up"
 
         elif (self.state == Statuses.DRIVING):
             self._setState(Statuses.DELIVERING)
-            print("exited driving")
+            print(f"courier {self.id} has exited driving at date-time: {globals.format_day()} {globals.format_clock()}")
 
         elif (self.state == Statuses.DELIVERING):
             if self.loadedBoxes > 0 and self.attempts < self.maxAttempts:
@@ -171,14 +172,14 @@ class Courier:
                 self._setState(Statuses.DRIVING)
             else:
                 self._setState(Statuses.RETURNING)
-            print("exited delivering")
+            print(f"courier {self.id} has exited delivering at date-time: {globals.format_day()} {globals.format_clock()}")
 
         elif (self.state == Statuses.RETURNING):
             self._setState(Statuses.IDLING)
             globals.boxPiles[self.rng.randint(0, 1)].box_count += self.loadedBoxes
             self._setState(Statuses.WALKING)
-            print("exited returning")
-            print(f"courier {self.id} has {self.loadedBoxes} boxes left")
+            print(f"courier {self.id} has exited returning at date-time: {globals.format_day()} {globals.format_clock()}")
+            print(f"courier {self.id} has {self.loadedBoxes} boxes left at date-time: {globals.format_day()} {globals.format_clock()}")
 
         elif (self.state == Statuses.DESPAWNING):
             pass

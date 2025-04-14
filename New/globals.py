@@ -35,6 +35,21 @@ NO_NPI = 40
 dt: float = 0
 day: int = 1
 shift: int = 1
+clock: int = 25200  
+is_peak: bool = False  # True if peak season, False if non-peak
+recall_triggered: bool = False  # True if recalls have been triggered, False otherwise
+
+def format_clock() -> str:
+    hours = clock // 3600
+    minutes = (clock % 3600) // 60
+    seconds = clock % 60
+    return f"{hours:02}:{minutes:02}:{seconds:02}"
+
+def format_day() -> str:
+    weekdays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+    # Only 5-day workweek — wrap every 5 days
+    day_index = (day - 1) % 5
+    return f"{weekdays[day_index]}"
 
 couriers = []
 boxPiles = []
