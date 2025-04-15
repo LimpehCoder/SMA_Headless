@@ -13,6 +13,7 @@ class Statuses(Enum):
     DELIVERING = 6     # Attempting deliveries
     RETURNING = 7      # Returning after delivery
     DESPAWNING = 8     # End-of-day shutdown
+    RESTING = 9      # Resting between shifts
 
 delays = [
     [0, 0],                             # IDLING — no delay
@@ -24,6 +25,8 @@ delays = [
     [globals.DELIVERING_MIN_TIMING, globals.DELIVERING_MAX_TIMING],                             # DELIVERING — attempt takes time
     [globals.RETURN_MIN_TIMING, globals.RETURN_MAX_TIMING],  # RETURNING — variable travel back time
     [0, 0],                             # DESPAWNING — instant
+    [0,0]
+    
 ]
 
 
@@ -134,19 +137,13 @@ class Courier:
             self.carryingBoxes = 0
 
             # Determine which box queues to check based on job and shift
-            targetQueues = []
-            if self.job == globals.Jobs.STAFF:
-                if globals.shift == globals.Shifts.OVERTIME:
-                    targetQueues.extend([0, 1])
-                else:
-                    targetQueues.append(0)
-            else:
-                targetQueues.append(self.job.value)
-
+            
             # Check if all target piles are empty
-            areAllBoxCountsZero = all(globals.boxPiles[q].box_count == 0 for q in targetQueues)
-
-            print(f"{self.job} courier {self.id} has {self.loadedBoxes} boxes at {globals.format_day()} {globals.format_clock()}")
+            if globals.boxPiles[pile_index].box_count == 0:
+                areAllBoxCountsZero = True
+            else:
+                areAllBoxCountsZero = False
+        #    print(f"{self.job} courier {self.id} has {self.loadedBoxes} boxes at {globals.format_day()} {globals.format_clock()}")
 
             # Determine if the courier should drive or go back to pick up more
             if self.loadedBoxes >= globals.VAN_CAP_MAX or areAllBoxCountsZero:
@@ -198,6 +195,16 @@ class Courier:
                             globals.NO_SUCCESSFUL_DELIVERY_SUBCON +=toDeliver
                         else:
                             globals.NO_FAILED_DELIVERY_SUBCON +=toDeliver
+                elif self.job == globals.Jobs.NPI:
+                    toDeliver=int(random.uniform(1,5))
+                    if toDeliver>self.loadedBoxes:
+                        toDeliver=self.loadedBoxes
+                    if self.rng.uniform(0, 1) > globals.NOT_HOME_CHANCE:
+                        if self.rng.uniform(0,1) > globals.IS_BLIND_CHANCE*1.2:
+                            self.loadedBoxes -= toDeliver
+                            globals.NO_SUCCESSFUL_DELIVERY_NPI +=toDeliver
+                        else:
+                            globals.NO_FAILED_DELIVERY_NPI +=toDeliver
                                             
                 self.attempts += 1
                 #print(f"{self.job} courier {self.id} has {self.loadedBoxes} boxes left at {globals.format_day()} {globals.format_clock()}")
@@ -212,12 +219,13 @@ class Courier:
 
         elif self.state == Statuses.RETURNING:
             # Return any leftover boxes to a random box pile and restart
-            self._setState(Statuses.IDLING)
             globals.boxPiles[pile_index].box_count += self.loadedBoxes
-            self._setState(Statuses.WALKING)
+            self._setState(Statuses.RESTING)
 
-            print(f"{self.job} courier {self.id} has exited returning at {globals.format_day()} {globals.format_clock()}")
-            print(f"{self.job} courier {self.id} has {self.loadedBoxes} boxes left at {globals.format_day()} {globals.format_clock()}")
+        #    print(f"{self.job} courier {self.id} has exited returning at {globals.format_day()} {globals.format_clock()}")
+#            print(f"{self.job} courier {self.id} has {self.loadedBoxes} boxes left at {globals.format_day()} {globals.format_clock()}")
+        elif self.state == Statuses.RESTING:
+            print(f"{self.job} courier {self.id} is resting")
 
         elif self.state == Statuses.DESPAWNING:
             # No updates for despawned couriers

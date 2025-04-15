@@ -47,4 +47,4 @@ class BoxPile:
       BoxPile.min_loaded_count = num_carrying
 
 #    print(f"Courier with id {courier.id} picked up {courier.carryingBoxes} boxes at time {globals.format_clock()}")
-    print(f"Box pile {self.index} has {self.box_count} boxes left at {globals.format_day()} {globals.format_clock()}")
+#    print(f"Box pile {self.index} has {self.box_count} boxes left at {globals.format_day()} {globals.format_clock()}")

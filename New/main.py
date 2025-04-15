@@ -4,18 +4,19 @@ import globals  # Import shared global variables and constants
 import time  # For managing simulation timing
 import box_pile  # Import the BoxPile class/module
 import random  # Random number generation (used for shipment sizes)
+from front_end import get_boolean_input, get_int_input  # Import helper functions for user input
+import stats
 
+globals.is_peak = get_boolean_input("Is this Peak?")
+globals.is_NPI = get_boolean_input("Is this NPI?")
+#globals.NO_STAFF = get_int_input("How many Staff?")
+#globals.NO_SUBCON = get_int_input("How many Subcon?")
+#globals.NO_NPI = get_int_input("How many Subcon_NPI?")
 isRunning = True  # Flag to keep the simulation running
 currTime = time.time()  # Capture the current wall-clock time for simulation timing
 
-# Function to calculate cost (currently unused due to early return)
-def calculateCost():
-    globals.NO_STAFF * globals.STAFF_MONTHLY_PAY//20 * 20 + \
-    (globals.NO_FAILED_DELIVERY_SUBCON + globals.NO_SUCCESSFUL_DELIVERY_SUBCON) * globals.SUBCON_PER_STOP_PAY
-    return
-
 # Function to create three phase setups (morning, afternoon, reset), based on whether it's peak or non-peak
-def setPhase(peak):
+def setPhase():
     if globals.is_NPI:
         if len(globals.boxPiles)<2:  # Sanity check to ensure boxPiles are initialized
             raise Exception("global.boxPiles Not Initialised")  # Error if not
@@ -24,13 +25,14 @@ def setPhase(peak):
             raise Exception("global.boxPiles Not Initialised")
 
     # Assign shipment max/min based on PEAK as default
-    amshipmentmax = globals.PEAK_SHIPMENT_MAX_AM
-    amshipmentmin = globals.PEAK_SHIPMENT_MIN_AM
-    pmshipmentmax = globals.PEAK_SHIPMENT_MAX_PM
-    pmshipmentmin = globals.PEAK_SHIPMENT_MIN_PM
+    if globals.is_peak:
+        amshipmentmax = globals.PEAK_SHIPMENT_MAX_AM
+        amshipmentmin = globals.PEAK_SHIPMENT_MIN_AM
+        pmshipmentmax = globals.PEAK_SHIPMENT_MAX_PM
+        pmshipmentmin = globals.PEAK_SHIPMENT_MIN_PM
 
     # If this is a NON-PEAK phase, override with non-peak shipment settings
-    if peak:
+    else:
         amshipmentmax = globals.NONPEAK_SHIPMENT_MAX_AM
         amshipmentmin = globals.NONPEAK_SHIPMENT_MIN_AM
         pmshipmentmax = globals.NONPEAK_SHIPMENT_MAX_PM
@@ -55,23 +57,15 @@ def setPhase(peak):
     # Find max and min shipment volume across all peak and non-peak sets
     # Flatten and get the max and min from all four lists
     maxship = max(
-        max(globals.PEAK_SHIPMENT_MAX_AM),
-        max(globals.PEAK_SHIPMENT_MAX_PM),
-        max(globals.NONPEAK_SHIPMENT_MAX_AM),
-        max(globals.NONPEAK_SHIPMENT_MAX_PM)
-        )
+        max(globals.PEAK_SHIPMENT_MAX_AM), max(globals.PEAK_SHIPMENT_MAX_PM), max(globals.NONPEAK_SHIPMENT_MAX_AM), max(globals.NONPEAK_SHIPMENT_MAX_PM))
 
     minship = min(
-        min(globals.PEAK_SHIPMENT_MIN_AM),
-        min(globals.PEAK_SHIPMENT_MIN_PM),
-        min(globals.NONPEAK_SHIPMENT_MIN_AM),
-        min(globals.NONPEAK_SHIPMENT_MIN_PM)
-        )
+        min(globals.PEAK_SHIPMENT_MIN_AM), min(globals.PEAK_SHIPMENT_MIN_PM), min(globals.NONPEAK_SHIPMENT_MIN_AM), min(globals.NONPEAK_SHIPMENT_MIN_PM))
 
     # Scale number of NPI and SUBCON couriers based on demand from AM shipments
     globals.NO_SUBCON = (globals.SUBCON_MAX - globals.SUBCON_MIN) * (AM[0] - minship)/(maxship - minship)
     if globals.is_NPI:
-        globals.NO_NPI = (globals.SUBCON_MAX - globals.SUBCON_MIN) * (AM[0] - minship)/(maxship - minship)
+        globals.NO_NPI = (globals.SUBCON_MAX - globals.SUBCON_MIN) * (AM[1] - minship)/(maxship - minship)
 
     # Define a nested function factory that returns an initializer function
     def thing(load):
@@ -103,6 +97,10 @@ def setPhase(peak):
 
 def endofDay():
     if globals.format_clock() == "22:00:00":
+        stats.log_daily_cost()
+        stats.log_daily_delivery_stats()
+        stats.log_end_of_day_statuses()
+
         for courier in globals.couriers:
             total_boxes=courier.carryingBoxes + courier.loadedBoxes
             if total_boxes > 0:
@@ -110,14 +108,21 @@ def endofDay():
                 globals.boxPiles[0].box_count += total_boxes
                 courier.loadedBoxes = 0
                 courier.carryingBoxes = 0
-                print(f"Courier {courier.id} returned {total_boxes} boxes to box pile {courier.job.value}.")
+             #   print(f"Courier {courier.id} returned {total_boxes} boxes to box pile {courier.job.value}.")
                 courier._setState(Statuses.DESPAWNING)
         globals.couriers.clear()
         globals.recall_triggered = True
-        print("End of day reached. Triggering recalls.")
-        print(f"Staff had {globals.NO_SUCCESSFUL_DELIVERY_STAFF} successful deliveries and {globals.NO_FAILED_DELIVERY_STAFF} failed deliveries.")
-        print(f"Subcon had {globals.NO_SUCCESSFUL_DELIVERY_SUBCON} successful deliveries and {globals.NO_FAILED_DELIVERY_SUBCON} failed deliveries.")
-        globals.NO_SUCCESSFUL_DELIVERY_STAFF,globals.NO_FAILED_DELIVERY_STAFF,globals.NO_SUCCESSFUL_DELIVERY_SUBCON,globals.NO_FAILED_DELIVERY_SUBCON = 0,0,0,0
+       # print("End of day reached. Triggering recalls.")
+       # print(f"Staff had {globals.NO_SUCCESSFUL_DELIVERY_STAFF} successful deliveries and {globals.NO_FAILED_DELIVERY_STAFF} failed deliveries.")
+       # print(f"Subcon had {globals.NO_SUCCESSFUL_DELIVERY_SUBCON} successful deliveries and {globals.NO_FAILED_DELIVERY_SUBCON} failed deliveries.")
+        if globals.is_NPI:
+       #     print(f"NPI had {globals.NO_SUCCESSFUL_DELIVERY_NPI} successful deliveries and {globals.NO_FAILED_DELIVERY_NPI} failed deliveries.")
+            globals.boxPiles[0].box_count += globals.boxPiles[1].box_count
+            globals.boxPiles[1].box_count = 0
+       #     print(f"Box pile 1 has been emptied into box pile 0.")
+        globals.NO_SUCCESSFUL_DELIVERY_STAFF,globals.NO_FAILED_DELIVERY_STAFF,globals.NO_SUCCESSFUL_DELIVERY_SUBCON,\
+        globals.NO_FAILED_DELIVERY_SUBCON, globals.NO_FAILED_DELIVERY_NPI, globals.NO_SUCCESSFUL_DELIVERY_NPI = 0,0,0,0,0,0
+        #print(f"Main pile has {globals.boxPiles[0].box_count} boxes at End of Day.")
 
 # --- Initialization Section ---
 
@@ -135,9 +140,9 @@ else:
 
 # Set whether current day is peak or non-peak
 if globals.is_peak:
-    set_morning, set_afternoon, set_reset = setPhase(peak=True)
+    set_morning, set_afternoon, set_reset = setPhase()
 else:
-    set_morning, set_afternoon, set_reset = setPhase(peak=False)
+    set_morning, set_afternoon, set_reset = setPhase()
 
 # --- Main Simulation Loop ---
 while (isRunning):  # Run loop while simulation is active
@@ -150,19 +155,23 @@ while (isRunning):  # Run loop while simulation is active
         set_morning()
         globals.phase_initialised = "MORNING"
         globals.shift = globals.Shifts.MORNING
-        print("Morning phase initialized.")
+        #print("Morning phase initialized.")
 
     elif globals.format_clock() == "13:00:00" and globals.phase_initialised != "AFTERNOON":
         set_afternoon()
         globals.phase_initialised = "AFTERNOON"
         globals.shift = globals.Shifts.AFTERNOON
-        print("Afternoon phase initialized.")
+        #print("Afternoon phase initialized.")
+
+    #elif globals.format_clock() == "17:59:59" or globals.format_clock() == "12:59:59":
+        #for man in globals.couriers:
+            #print(f"{man.job} courier {man.id} is currently {man.state}")
 
     elif globals.format_clock() == "18:00:00" and globals.phase_initialised != "OVERTIME":
         set_reset()
         globals.phase_initialised = "OVERTIME"
         globals.shift = globals.Shifts.OVERTIME
-        print("Reset phase initialized.")
+        #print("Overtime phase initialized.")
 
     elif globals.format_clock() == "22:00:00":
         endofDay()
@@ -186,5 +195,13 @@ while (isRunning):  # Run loop while simulation is active
     while (globals.dt < 1/60):  # Enforce 60 FPS timing
         globals.dt = time.time() - currTime  # Wait until enough time has passed for next frame
     
-    if globals.day == 120:
+    if not globals.is_NPI and globals.day == 21:
+        stats.plot_daily_delivery_summary()
+        stats.plot_daily_cost_summary()
+        stats.plot_end_of_day_statuses()
+
         isRunning = False
+    elif globals.is_NPI:
+        if globals.day==2:
+            globals.is_NPI = False
+
