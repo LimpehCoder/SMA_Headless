@@ -169,6 +169,7 @@ class Courier:
                 raise "you messed up"
 
         elif self.state == Statuses.DRIVING:
+            self.route_start_time = globals.clock  # record when route begins
             # Arrived at destination, begin delivery attempt
             self._setState(Statuses.DELIVERING)
            # print(f"{self.job} courier {self.id} has exited driving at {globals.format_day()} {globals.format_clock()}")
@@ -211,6 +212,18 @@ class Courier:
                 self._setState(Statuses.DRIVING)  # Go back for the next stop
 
             else:
+                route_time = globals.clock - getattr(self, "route_start_time", globals.clock)
+                globals.courier_route_stats.append({
+                    "day": globals.day,
+                    "shift": globals.shift.name if globals.shift else "UNKNOWN",
+                    "courier_id": self.id,
+                    "job": self.job.name,
+                    "stops": self.attempts,
+                    "route_time": round(route_time, 2),
+                    "spr": self.attempts / 1,  # always 1 route
+                    "sporh": self.attempts / (route_time / 3600) if route_time > 0 else 0
+                })
+
                 self._setState(Statuses.RETURNING)  # Move on to return phase
              #   print(f"{self.job} courier {self.id} has completed deliveries with {self.loadedBoxes} boxes left at {globals.format_day()} {globals.format_clock()}")
 

@@ -219,11 +219,12 @@ while (isRunning):  # Run loop while simulation is active
         globals.dt = time.time() - currTime  # Wait until enough time has passed for next frame
     
     if not globals.is_NPI and globals.day == 21:
+        stats.get_courier_route_dataframe()
         stats.plot_daily_delivery_summary()
         stats.plot_daily_cost_summary()
         stats.plot_end_of_shift_statuses()
         stats.plot_leftover_boxes_by_shift()
-
+    
         isRunning = False
     elif globals.is_NPI:
         if globals.day==2:

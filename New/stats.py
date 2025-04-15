@@ -96,8 +96,8 @@ def plot_daily_delivery_summary():
     plt.show()
 
 def log_daily_cost():
-    # 1. Staff daily pay
-    staff_cost = globals.NO_STAFF * (globals.STAFF_MONTHLY_PAY // 20)
+    # 1. Staff is paid every 20 days (on day 1, 21, 41, ...)
+    staff_cost = 4000 if (globals.day - 1) % 20 == 0 else 0
 
     # 2. Subcon stop pay
     subcon_cost = (globals.NO_FAILED_DELIVERY_SUBCON + globals.NO_SUCCESSFUL_DELIVERY_SUBCON) * globals.SUBCON_PER_STOP_PAY
@@ -266,3 +266,38 @@ def plot_leftover_boxes_by_shift():
     plt.xticks(rotation=0)
     plt.tight_layout()
     plt.show()
+
+def log_daily_route_metrics():
+    from collections import defaultdict
+    day_stats = defaultdict(lambda: {"routes": 0, "stops": 0, "time": 0.0})
+
+    for route in globals.route_stats:
+        if route["day"] != globals.day:
+            continue
+        key = route["job"].lower()
+        day_stats[key]["routes"] += 1
+        day_stats[key]["stops"] += route["stops"]
+        day_stats[key]["time"] += route["route_time"]
+
+    # Store per-day summary
+    globals.daily_route_summary.append({
+        "day": globals.day,
+        "staff_spr": day_stats["staff"]["stops"] / day_stats["staff"]["routes"] if day_stats["staff"]["routes"] else 0,
+        "subcon_spr": day_stats["sub_con"]["stops"] / day_stats["sub_con"]["routes"] if day_stats["sub_con"]["routes"] else 0,
+        "npi_spr": day_stats["npi"]["stops"] / day_stats["npi"]["routes"] if day_stats["npi"]["routes"] else 0,
+
+        "staff_sph": day_stats["staff"]["stops"] / (day_stats["staff"]["time"]/3600) if day_stats["staff"]["time"] else 0,
+        "subcon_sph": day_stats["sub_con"]["stops"] / (day_stats["sub_con"]["time"]/3600) if day_stats["sub_con"]["time"] else 0,
+        "npi_sph": day_stats["npi"]["stops"] / (day_stats["npi"]["time"]/3600) if day_stats["npi"]["time"] else 0,
+    })
+
+def get_courier_route_dataframe(filename="courier_routes.csv"):
+    if not globals.courier_route_stats:
+        print("No courier route data available.")
+        return pd.DataFrame()
+
+    df = pd.DataFrame(globals.courier_route_stats)
+    df = df[["day", "shift", "courier_id", "job", "stops", "route_time", "spr", "sporh"]]
+    print(df)
+    df.to_csv(filename, index=False)
+    return

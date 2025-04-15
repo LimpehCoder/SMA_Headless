@@ -75,3 +75,4 @@ daily_delivery_stats = []  # Holds one dict per day
 daily_cost_stats =[]
 daily_status_counts = []  # List of dicts, one per day
 leftover_boxes_log = []
+courier_route_stats = []
