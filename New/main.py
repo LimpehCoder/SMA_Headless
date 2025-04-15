@@ -9,9 +9,26 @@ import stats
 
 globals.is_peak = get_boolean_input("Is this Peak?")
 globals.is_NPI = get_boolean_input("Is this NPI?")
-#globals.NO_STAFF = get_int_input("How many Staff?")
-#globals.NO_SUBCON = get_int_input("How many Subcon?")
-#globals.NO_NPI = get_int_input("How many Subcon_NPI?")
+globals.is_manual_manpower = get_boolean_input("Do you want to manually set the number of each courier?")
+if globals.is_manual_manpower:
+    globals.NO_STAFF = get_int_input("How many Staff?")
+    globals.NO_SUBCON = get_int_input("How many Subcon?")
+    if globals.is_NPI:
+        globals.NO_NPI = get_int_input("How many Subcon_NPI?")
+globals.is_manual_volume = get_boolean_input("Do you want to manually set the shipment volume variables?")
+if globals.is_manual_volume:
+    if globals.is_peak:
+        globals.PEAK_SHIPMENT_MAX_AM = get_int_input("What is the max AM shipment volume?")
+        globals.PEAK_SHIPMENT_MIN_AM = get_int_input("What is the min AM shipment volume?")
+        globals.PEAK_SHIPMENT_MAX_PM = get_int_input("What is the max PM shipment volume?")
+        globals.PEAK_SHIPMENT_MIN_PM = get_int_input("What is the min PM shipment volume?")
+    else:
+        globals.NONPEAK_SHIPMENT_MAX_AM = get_int_input("What is the max AM shipment volume?")
+        globals.NONPEAK_SHIPMENT_MIN_AM = get_int_input("What is the min AM shipment volume?")
+        globals.NONPEAK_SHIPMENT_MAX_PM = get_int_input("What is the max PM shipment volume?")
+        globals.NONPEAK_SHIPMENT_MIN_PM = get_int_input("What is the min PM shipment volume?")
+   # if globals.is_NPI:
+
 isRunning = True  # Flag to keep the simulation running
 currTime = time.time()  # Capture the current wall-clock time for simulation timing
 
@@ -62,10 +79,11 @@ def setPhase():
     minship = min(
         min(globals.PEAK_SHIPMENT_MIN_AM), min(globals.PEAK_SHIPMENT_MIN_PM), min(globals.NONPEAK_SHIPMENT_MIN_AM), min(globals.NONPEAK_SHIPMENT_MIN_PM))
 
-    # Scale number of NPI and SUBCON couriers based on demand from AM shipments
-    globals.NO_SUBCON = (globals.SUBCON_MAX - globals.SUBCON_MIN) * (AM[0] - minship)/(maxship - minship)
-    if globals.is_NPI:
-        globals.NO_NPI = (globals.SUBCON_MAX - globals.SUBCON_MIN) * (AM[1] - minship)/(maxship - minship)
+    if globals.is_manual_manpower==False:
+        # Scale number of NPI and SUBCON couriers based on demand from AM shipments
+        globals.NO_SUBCON = (globals.SUBCON_MAX - globals.SUBCON_MIN) * (AM[0] - minship)/(maxship - minship)
+        if globals.is_NPI:
+            globals.NO_NPI = (globals.SUBCON_MAX - globals.SUBCON_MIN) * (AM[1] - minship)/(maxship - minship)
 
     # Define a nested function factory that returns an initializer function
     def thing(load):
@@ -99,7 +117,6 @@ def endofDay():
     if globals.format_clock() == "22:00:00":
         stats.log_daily_cost()
         stats.log_daily_delivery_stats()
-        stats.log_end_of_day_statuses()
 
         for courier in globals.couriers:
             total_boxes=courier.carryingBoxes + courier.loadedBoxes
@@ -158,6 +175,8 @@ while (isRunning):  # Run loop while simulation is active
         #print("Morning phase initialized.")
 
     elif globals.format_clock() == "13:00:00" and globals.phase_initialised != "AFTERNOON":
+        stats.log_shift_leftover_boxes()
+        stats.log_end_of_shift_statuses()
         set_afternoon()
         globals.phase_initialised = "AFTERNOON"
         globals.shift = globals.Shifts.AFTERNOON
@@ -168,12 +187,16 @@ while (isRunning):  # Run loop while simulation is active
             #print(f"{man.job} courier {man.id} is currently {man.state}")
 
     elif globals.format_clock() == "18:00:00" and globals.phase_initialised != "OVERTIME":
+        stats.log_shift_leftover_boxes()
+        stats.log_end_of_shift_statuses()
         set_reset()
         globals.phase_initialised = "OVERTIME"
         globals.shift = globals.Shifts.OVERTIME
         #print("Overtime phase initialized.")
 
     elif globals.format_clock() == "22:00:00":
+        stats.log_shift_leftover_boxes()
+        stats.log_end_of_shift_statuses()
         endofDay()
     
     elif globals.format_clock() == "07:00:00":
@@ -198,7 +221,8 @@ while (isRunning):  # Run loop while simulation is active
     if not globals.is_NPI and globals.day == 21:
         stats.plot_daily_delivery_summary()
         stats.plot_daily_cost_summary()
-        stats.plot_end_of_day_statuses()
+        stats.plot_end_of_shift_statuses()
+        stats.plot_leftover_boxes_by_shift()
 
         isRunning = False
     elif globals.is_NPI:

@@ -42,6 +42,8 @@ shift: int = 1
 clock: int = 25200  
 is_peak: bool = False  # True if peak season, False if non-peak
 is_NPI: bool = False  # True if NPI couriers are present, False otherwise
+is_manual_manpower: bool = False
+is_manual_volume: bool = False
 recall_triggered: bool = False  # True if recalls have been triggered, False otherwise
 
 def format_clock() -> str:
@@ -72,3 +74,4 @@ class Shifts(Enum):
 daily_delivery_stats = []  # Holds one dict per day
 daily_cost_stats =[]
 daily_status_counts = []  # List of dicts, one per day
+leftover_boxes_log = []

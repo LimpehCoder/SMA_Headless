@@ -216,7 +216,6 @@ class Courier:
 
            # print(f"{self.job} courier {self.id} has exited delivering at {globals.format_day()} {globals.format_clock()}")
 
-
         elif self.state == Statuses.RETURNING:
             # Return any leftover boxes to a random box pile and restart
             globals.boxPiles[pile_index].box_count += self.loadedBoxes

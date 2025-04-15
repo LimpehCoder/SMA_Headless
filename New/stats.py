@@ -2,6 +2,7 @@ import globals
 import pandas as pd
 import matplotlib.pyplot as plt
 from Courier import Statuses
+from collections import Counter
 
 def log_daily_delivery_stats():
     # Append current day's delivery stats to the master list
@@ -39,14 +40,53 @@ def plot_daily_delivery_summary():
     x = df.index
 
     # Plot grouped bars for each courier type
-    ax.bar(x - width, df["staff_success"], width, label="Staff Success", color="#4caf50")
-    ax.bar(x - width, df["staff_fail"], width, bottom=df["staff_success"], label="Staff Fail", color="#c62828")
+    staff_success = df["staff_success"]
+    staff_fail = df["staff_fail"]
+    subcon_success = df["subcon_success"]
+    subcon_fail = df["subcon_fail"]
+    npi_success = df["npi_success"]
+    npi_fail = df["npi_fail"]
 
-    ax.bar(x, df["subcon_success"], width, label="Subcon Success", color="#2196f3")
-    ax.bar(x, df["subcon_fail"], width, bottom=df["subcon_success"], label="Subcon Fail", color="#e53935")
+    staff_total = staff_success + staff_fail
+    subcon_total = subcon_success + subcon_fail
+    npi_total = npi_success + npi_fail
 
-    ax.bar(x + width, df["npi_success"], width, label="NPI Success", color="#ff9800")
-    ax.bar(x + width, df["npi_fail"], width, bottom=df["npi_success"], label="NPI Fail", color="#d32f2f")
+    # Plotting bars
+    bars = []
+    bars.append(ax.bar(x - width, staff_success, width, label="Staff Success", color="#4caf50"))
+    bars.append(ax.bar(x - width, staff_fail, width, bottom=staff_success, label="Staff Fail", color="#c62828"))
+
+    bars.append(ax.bar(x, subcon_success, width, label="Subcon Success", color="#2196f3"))
+    bars.append(ax.bar(x, subcon_fail, width, bottom=subcon_success, label="Subcon Fail", color="#e53935"))
+
+    bars.append(ax.bar(x + width, npi_success, width, label="NPI Success", color="#ff9800"))
+    bars.append(ax.bar(x + width, npi_fail, width, bottom=npi_success, label="NPI Fail", color="#d32f2f"))
+
+    # Annotate each segment with its percentage
+    for i, day in enumerate(df.index):
+        # Staff
+        total = staff_total.loc[day]
+        if total > 0:
+            ax.text(x[i] - width, staff_success.loc[day] / 2,
+                    f"{(staff_success.loc[day] / total * 100):.0f}%", ha="center", va="center", color="white", fontsize=9)
+            ax.text(x[i] - width, staff_success.loc[day] + staff_fail.loc[day] / 2,
+                    f"{(staff_fail.loc[day] / total * 100):.0f}%", ha="center", va="center", color="white", fontsize=9)
+
+        # Subcon
+        total = subcon_total.loc[day]
+        if total > 0:
+            ax.text(x[i], subcon_success.loc[day] / 2,
+                    f"{(subcon_success.loc[day] / total * 100):.0f}%", ha="center", va="center", color="white", fontsize=9)
+            ax.text(x[i], subcon_success.loc[day] + subcon_fail.loc[day] / 2,
+                    f"{(subcon_fail.loc[day] / total * 100):.0f}%", ha="center", va="center", color="white", fontsize=9)
+
+        # NPI
+        total = npi_total.loc[day]
+        if total > 0:
+            ax.text(x[i] + width, npi_success.loc[day] / 2,
+                    f"{(npi_success.loc[day] / total * 100):.0f}%", ha="center", va="center", color="black", fontsize=9)
+            ax.text(x[i] + width, npi_success.loc[day] + npi_fail.loc[day] / 2,
+                    f"{(npi_fail.loc[day] / total * 100):.0f}%", ha="center", va="center", color="white", fontsize=9)
 
     ax.set_xlabel("Day")
     ax.set_ylabel("Deliveries")
@@ -93,10 +133,21 @@ def plot_daily_cost_summary():
     width = 0.2
     x = df.index
 
-    ax.bar(x - 1.5*width, df["staff_cost"], width, label="Staff Salary", color="#4caf50")
-    ax.bar(x - 0.5*width, df["subcon_cost"], width, label="Subcon Stops", color="#2196f3")
-    ax.bar(x + 0.5*width, df["npi_cost"], width, label="NPI Stops", color="#ff9800")
-    ax.bar(x + 1.5*width, df["van_cost"], width, label="Idle Vans", color="#c62828")
+    # Plot each category of cost
+    staff_bars = ax.bar(x - 1.5*width, df["staff_cost"], width, label="Staff Salary", color="#4caf50")
+    subcon_bars = ax.bar(x - 0.5*width, df["subcon_cost"], width, label="Subcon Stops", color="#2196f3")
+    npi_bars = ax.bar(x + 0.5*width, df["npi_cost"], width, label="NPI Stops", color="#ff9800")
+    van_bars = ax.bar(x + 1.5*width, df["van_cost"], width, label="Idle Vans", color="#c62828")
+
+    # Annotate each bar with its height (i.e., cost)
+    for bars in [staff_bars, subcon_bars, npi_bars, van_bars]:
+        for bar in bars:
+            height = bar.get_height()
+            ax.annotate(f"${int(height)}",
+                        xy=(bar.get_x() + bar.get_width() / 2, height),
+                        xytext=(0, 3),  # Offset slightly above the bar
+                        textcoords="offset points",
+                        ha="center", va="bottom", fontsize=9)
 
     ax.set_xlabel("Day")
     ax.set_ylabel("Cost ($)")
@@ -105,43 +156,113 @@ def plot_daily_cost_summary():
     plt.tight_layout()
     plt.show()
 
-from collections import Counter
-
-def log_end_of_day_statuses():
-    # Count how many couriers ended in each state
+def log_end_of_shift_statuses():
+    # Count courier statuses at the end of the current shift
     state_names = [courier.state.name for courier in globals.couriers]
     counts = Counter(state_names)
 
-    # Build a clean dict of status counts for the day
-    status_record = {"day": globals.day}
+    # Build a record with day + shift
+    status_record = {
+        "day": globals.day,
+        "shift": globals.shift.name if globals.shift else "UNKNOWN"
+    }
+
+    # Include counts for each known status
     for status in [status.name for status in Statuses]:
         status_record[status.lower()] = counts.get(status, 0)
 
     globals.daily_status_counts.append(status_record)
 
-
-def plot_end_of_day_statuses():
+def plot_end_of_shift_statuses():
     df = pd.DataFrame(globals.daily_status_counts)
     if df.empty:
         print("No status data to plot.")
         return
 
-    df.set_index("day", inplace=True)
+    # Combine day and shift into a single label for x-axis
+    df["label"] = df["day"].astype(str) + " - " + df["shift"]
 
-    # Get all possible status columns (excluding 'day')
-    status_cols = [col for col in df.columns]
+    # Set label as index
+    df.set_index("label", inplace=True)
 
-    # Plot as stacked bar chart
+    # Get only the status columns (exclude 'day' and 'shift')
+    status_cols = [col for col in df.columns if col not in ["day", "shift"]]
+
+    # Plot stacked bar chart
     ax = df[status_cols].plot(
         kind="bar",
         stacked=True,
-        figsize=(12, 6),
+        figsize=(14, 6),
         colormap="tab20"
     )
-    ax.set_title("Courier Status Distribution at End of Day")
-    ax.set_xlabel("Day")
+
+    # Annotate each stacked segment with percentage
+    for i, label in enumerate(df.index):
+        total = df.loc[label, status_cols].sum()
+        if total == 0:
+            continue
+
+        y_offset = 0
+        for col in status_cols:
+            value = df.at[label, col]
+            if value == 0:
+                continue
+            percent = value / total * 100
+            ax.text(i, y_offset + value / 2, f"{percent:.0f}%", ha='center', va='center', color='white', fontsize=8)
+            y_offset += value
+
+    ax.set_title("Courier Status Distribution at End of Each Shift")
+    ax.set_xlabel("Day - Shift")
     ax.set_ylabel("Number of Couriers")
     ax.legend(title="Status", bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.xticks(rotation=45, ha='right')
     plt.tight_layout()
     plt.show()
 
+def log_shift_leftover_boxes():
+    shift_name = globals.shift.name if globals.shift else "UNKNOWN"
+    day = globals.day
+
+    total_boxes = sum(pile.box_count for pile in globals.boxPiles)
+
+    # Optional: breakdown by pile
+    pile_data = {f"pile_{i}": pile.box_count for i, pile in enumerate(globals.boxPiles)}
+
+    # Log shift-level leftover count
+    log_entry = {
+        "day": day,
+        "shift": shift_name,
+        "total_boxes": total_boxes,
+        **pile_data
+    }
+
+    globals.leftover_boxes_log.append(log_entry)
+
+def plot_leftover_boxes_by_shift():
+    df = pd.DataFrame(globals.leftover_boxes_log)
+    if df.empty:
+        print("No box log data to plot.")
+        return
+
+    pivot_df = df.pivot(index="day", columns="shift", values="total_boxes").fillna(0)
+
+    ax = pivot_df.plot(kind="bar", figsize=(12, 6), width=0.7)
+
+    # Annotate each bar with the box count
+    for container in ax.containers:
+        for bar in container:
+            height = bar.get_height()
+            if height > 0:
+                ax.annotate(f"{int(height)}",
+                            xy=(bar.get_x() + bar.get_width() / 2, height),
+                            xytext=(0, 3),  # Slightly above the bar
+                            textcoords="offset points",
+                            ha='center', va='bottom', fontsize=9)
+
+    ax.set_title("Leftover Boxes at End of Each Shift")
+    ax.set_xlabel("Day")
+    ax.set_ylabel("Box Count")
+    ax.legend(title="Shift")
+    plt.xticks(rotation=0)
+    plt.tight_layout()
+    plt.show()
