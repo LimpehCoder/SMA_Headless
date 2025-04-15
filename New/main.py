@@ -10,9 +10,9 @@ currTime = time.time()  # Capture the current wall-clock time for simulation tim
 
 # Function to calculate cost (currently unused due to early return)
 def calculateCost():
-    return  # This immediately ends the function — the logic below is not run
     globals.NO_STAFF * globals.STAFF_MONTHLY_PAY//20 * 20 + \
     (globals.NO_FAILED_DELIVERY_SUBCON + globals.NO_SUCCESSFUL_DELIVERY_SUBCON) * globals.SUBCON_PER_STOP_PAY
+    return
 
 # Function to create three phase setups (morning, afternoon, reset), based on whether it's peak or non-peak
 def setPhase(peak):
@@ -115,6 +115,9 @@ def endofDay():
         globals.couriers.clear()
         globals.recall_triggered = True
         print("End of day reached. Triggering recalls.")
+        print(f"Staff had {globals.NO_SUCCESSFUL_DELIVERY_STAFF} successful deliveries and {globals.NO_FAILED_DELIVERY_STAFF} failed deliveries.")
+        print(f"Subcon had {globals.NO_SUCCESSFUL_DELIVERY_SUBCON} successful deliveries and {globals.NO_FAILED_DELIVERY_SUBCON} failed deliveries.")
+        globals.NO_SUCCESSFUL_DELIVERY_STAFF,globals.NO_FAILED_DELIVERY_STAFF,globals.NO_SUCCESSFUL_DELIVERY_SUBCON,globals.NO_FAILED_DELIVERY_SUBCON = 0,0,0,0
 
 # --- Initialization Section ---
 
@@ -124,11 +127,11 @@ for i in range(5):
 
 if globals.is_NPI:
     for i in range(2):
-        globals.boxPiles.append(box_pile.BoxPile(i, 6, 9, 40))
+        globals.boxPiles.append(box_pile.BoxPile(i, 6, 9, 0))
 # Create 2 BoxPiles (index 0 and 1) with cooldowns 6–9s and initial stock of 40
 else:
     for i in range(1):
-        globals.boxPiles.append(box_pile.BoxPile(i, 6, 9, 40))
+        globals.boxPiles.append(box_pile.BoxPile(i, 6, 9, 0))
 
 # Set whether current day is peak or non-peak
 if globals.is_peak:
@@ -163,8 +166,6 @@ while (isRunning):  # Run loop while simulation is active
 
     elif globals.format_clock() == "22:00:00":
         endofDay()
-        print(f"Staff had {globals.NO_SUCCESSFUL_DELIVERY_STAFF} successful deliveries and {globals.NO_FAILED_DELIVERY_STAFF} failed deliveries.")
-        print(f"Subcon had {globals.NO_SUCCESSFUL_DELIVERY_SUBCON} successful deliveries and {globals.NO_FAILED_DELIVERY_SUBCON} failed deliveries.")
     
     elif globals.format_clock() == "07:00:00":
         globals.recall_triggered = False
@@ -184,3 +185,6 @@ while (isRunning):  # Run loop while simulation is active
 
     while (globals.dt < 1/60):  # Enforce 60 FPS timing
         globals.dt = time.time() - currTime  # Wait until enough time has passed for next frame
+    
+    if globals.day == 120:
+        isRunning = False
